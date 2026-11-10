@@ -1,0 +1,15 @@
+**/target/
+.idea/
+.vscode/
+*.iml
+*.log
+/data/
+**/*.mv.db
+**/*.trace.db
+.DS_Store
+
+# Generated readable CI test reports
+ci-reports/
+
+# Submission archives contain downloaded reports / screenshots, not source code
+eclass-output/

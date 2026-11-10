@@ -1,0 +1,74 @@
+name: Citizen Registry CI
+
+# Trigger the pipeline on commits pushed to develop, not main or other branches.
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build, unit tests and REST API tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17 and Maven dependency cache
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Compile and package (without executing tests)
+        run: mvn --batch-mode --no-transfer-progress clean package -DskipTests
+
+      - name: Run unit tests (JUnit / Maven Surefire)
+        id: unit-tests
+        run: mvn --batch-mode --no-transfer-progress test
+
+      # The verify phase includes the Failsafe integration-test and verify goals
+      # of citizen-integration-tests. It also reruns Surefire tests, harmlessly.
+      - name: Run REST API / integration tests (Rest-Assured / Maven Failsafe)
+        id: api-tests
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Generate HTML reports and GitHub job summary
+        if: ${{ always() }}
+        run: python3 scripts/make_test_reports.py
+
+      - name: Validate both test report types were produced
+        if: ${{ success() }}
+        run: |
+          test -n "$(find citizen-service/target/surefire-reports -name 'TEST-*.xml' -print -quit)"
+          test -n "$(find citizen-integration-tests/target/failsafe-reports -name 'TEST-*.xml' -print -quit)"
+
+      - name: Upload unit test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: |
+            citizen-service/target/surefire-reports/TEST-*.xml
+            citizen-service/target/surefire-reports/*.txt
+            ci-reports/unit-tests.html
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload API / integration test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-integration-test-reports
+          path: |
+            citizen-integration-tests/target/failsafe-reports/TEST-*.xml
+            citizen-integration-tests/target/failsafe-reports/*.txt
+            ci-reports/api-integration-tests.html
+          if-no-files-found: warn
+          retention-days: 30
